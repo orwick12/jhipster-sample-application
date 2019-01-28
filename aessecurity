@@ -1,0 +1,79 @@
+import java.security.*;
+import java.io.UnsupportedEncodingException;
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+public class Encryption {
+
+    private String algorithm = "Sha-256";
+    private byte[] keyValue;
+    private byte[] plainText;
+
+    public Encryption(String key, String plainText)
+    {
+        this.keyValue = key.getBytes();
+        try {
+            this.plainText = plainText.getBytes("UTF-8");
+        }
+        catch (UnsupportedEncodingException e)
+        {
+            throw new AssertionError("UTF-8 not supported");
+        }
+    }
+
+    public static void main(String[] args) {
+
+    }
+
+    private byte[] encrypt(String plainText) throws UnsupportedEncodingException {
+
+        Key key = getKey();
+        ge
+        byte[] plain = plainText.getBytes("UTF-8");
+
+        byte[] encryptedMessage = getMac(getCipher(plain));
+
+        return encryptedMessage;
+    }
+
+    private byte[] getMac() throws NoSuchAlgorithmException, InvalidKeyException {
+        byte[] macKeyBytes = getKey(key, "Authentication");
+
+        Mac mac = Mac.getInstance("HmacSha256");
+        SecretKeySpec macKey = new SecretKeySpec(macKeyBytes, "HmacSha256");
+        mac.init(macKey);
+        mac.update(generateIV());
+        mac.update(cipherText);
+        return mac.doFinal();
+    }
+
+    private byte[] getCipher()
+    {
+       // byte[] encKeyBytes = getKey();
+        Cipher cipher = Cipher.getInstance(algorithm);
+        cipher.init(Cipher.ENCRYPT_MODE, encKeyBytes);
+        byte[] ciphBytes = cipher.doFinal(plainText);
+    }
+
+    private byte[] getKey() throws NoSuchAlgorithmException {
+        String key = "OurSvsModKeyPull"; // will be pulled from environment
+
+        MessageDigest digest = MessageDigest.getInstance(algorithm);
+        byte[] hash = digest.digest(key.getBytes());
+        byte[] hashedKey = new byte[key.length()];
+
+        for(int i = 0; i < key.length(); i++)
+            hashedKey[i] = hash[key.length() - 1];
+
+        return hashedKey;
+    }
+
+    private byte[] generateIV()
+    {
+        SecureRandom random = new SecureRandom();
+        byte[] iv = new byte[16];
+        random.nextBytes(iv);
+        return iv;
+    }
+}
