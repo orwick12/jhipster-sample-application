@@ -1,23 +1,23 @@
+
+import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
-import javax.crypto.Cipher;
-import javax.crypto.Mac;
-import javax.crypto.SecretKey;
+import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
 import java.util.Base64;
 import java.util.Base64.Encoder;
 
 
+public class Encryption {
 
-public class Main {
-
-    static String plainText = "Secret Code";
+    static String plainText = "hi there dsk afs  asdd fas";
+    static String PT2 = "this is the second message";
     static String password = "OurSvsModKeyPull"; // will be pulled from environment
 
     final private static String MAC_ALGORITHM = "HmacSHA256";
@@ -28,15 +28,20 @@ public class Main {
     final private static int ITERATIONS = 5000;
     final private static int KEY_LENGTH = 128;
 
-  public static void main(String[] args) throws Exception
-  {
-    Main thing = new Main();
-    
-    System.out.println(thing.encrypt(plainText, password));
-  }
-    private String encrypt(String plainText, String password) throws Exception
+    public static void main(String[] args) throws Exception
     {
-
+        Encryption thing = new Encryption();
+        System.out.println("");
+        String encryptedMessage = thing.encrypt(plainText);
+        String message2 = thing.encrypt(PT2);
+        System.out.println(encryptedMessage + " final encrypted output");
+        String decryptedMessage = thing.decrypt(encryptedMessage, password);
+        String decrypt2 = thing.decrypt(message2, password);
+        System.out.println(decryptedMessage +  " decrypted output");
+        System.out.println(decrypt2 + " secondoutput");
+    }
+    private String encrypt(String plainText) throws Exception
+    {
         SecureRandom random = SecureRandom.getInstance(RANDOM_ALGORITHM);
 
         byte[] encryptionSalt = new byte[20];
@@ -45,49 +50,74 @@ public class Main {
         SecretKeySpec encryptionKey = new SecretKeySpec(ekey, AES);
         Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new IvParameterSpec(new byte[16]));
-        byte[] cipheredPlainText = cipher.doFinal(plainText.getBytes("UTF-8"));
+        byte[] cipheredPlainText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
 
         byte[] macSalt = new byte[20];
         random.nextBytes(macSalt);
-        byte[] mKey = getKey(password, macSalt, ITERATIONS, KEY_LENGTH);
-        SecretKeySpec macKey = new SecretKeySpec(mKey, MAC_ALGORITHM);
-        Mac mac = Mac.getInstance(MAC_ALGORITHM);
-        mac.init(macKey);
-        byte[] hmac = mac.doFinal(cipheredPlainText);
-        
-        String encryptedMessage = concatEncryptions(encryptionSalt, macSalt, cipheredPlainText, hmac);
+        byte[] hmac = getMac(password,macSalt).doFinal(cipheredPlainText);
 
-        return encryptedMessage;
-
+        return concatEncryptions(encryptionSalt, macSalt, cipheredPlainText, hmac);
     }
 
     private String concatEncryptions(byte[] encryptionSalt, byte[] macSalt, byte[] cipheredPlainText, byte[] hmac)
     {
-        byte[] concatMessage = new byte[encryptionSalt.length + macSalt.length + cipheredPlainText.length + 
-        hmac.length];
+        byte[] concatMessage = new byte[encryptionSalt.length + macSalt.length + cipheredPlainText.length +
+                hmac.length];
 
         System.arraycopy(encryptionSalt, 0, concatMessage, 0, encryptionSalt.length);
         System.arraycopy(macSalt, 0, concatMessage, encryptionSalt.length, macSalt.length);
-        System.arraycopy(cipheredPlainText, 0, concatMessage, macSalt.length, cipheredPlainText.length);
-        System.arraycopy(hmac, 0, concatMessage, cipheredPlainText.length, hmac.length);
-
-        String outgoingMessage = new String(Base64.getEncoder().encodeToString(concatMessage));
-        return outgoingMessage;
+        System.arraycopy(cipheredPlainText, 0, concatMessage, macSalt.length + encryptionSalt.length, cipheredPlainText.length);
+        System.arraycopy(hmac, 0, concatMessage, cipheredPlainText.length +macSalt.length + encryptionSalt.length, hmac.length);
+        return Base64.getEncoder().encodeToString(concatMessage);
     }
 
 
     private byte[] getKey(String password, byte[] salt, int ITERATIONS, int KEY_LENGTH ) throws Exception {
         SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_ALGORITHM);
         SecretKey key = factory.generateSecret(new PBEKeySpec(password.toCharArray(),salt, ITERATIONS, KEY_LENGTH));
-        byte[] keyBytes = key.getEncoded();
-        return keyBytes;
+        return key.getEncoded();
     }
 
-    public String decrypt(String incomingMessage, String password)
+    private String decrypt(String incomingMessage, String password) throws Exception
     {
-      byte[] encryptedMessage = Base64.getDecoder().decode(incomingMessage);
+        byte[] encryptedMessage = Base64.getDecoder().decode(incomingMessage);
+        if(encryptedMessage.length >= 104)
+        {
+            byte[] hmac = Arrays.copyOfRange(encryptedMessage, encryptedMessage.length - 32, encryptedMessage.length);
+            byte[] macSalt = Arrays.copyOfRange(encryptedMessage, 20, 40);
+            byte[] encryptedSalt = Arrays.copyOfRange(encryptedMessage, 0, 20);
+            byte[] cipheredPlainText = Arrays.copyOfRange(encryptedMessage, 40, encryptedMessage.length - 32);
 
-      
+            byte[] hmacVerified = getMac(password,macSalt).doFinal(cipheredPlainText);
+            if (MessageDigest.isEqual(hmac, hmacVerified))
+            {
+                byte[] ekey = getKey(password, encryptedSalt, ITERATIONS, KEY_LENGTH);
+                SecretKeySpec encryptionKey = new SecretKeySpec(ekey, AES);
+                Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+                cipher.init(Cipher.DECRYPT_MODE, encryptionKey, new IvParameterSpec(new byte[16]));
+                byte[] decryptedMessage = cipher.doFinal(cipheredPlainText);
+
+                return new String(decryptedMessage, StandardCharsets.UTF_8);
+            }
+        }
+    throw new Exception();
+    }
+    private Mac getMac(String password, byte[] macSalt) throws Exception {
+        byte[] mKey = getKey(password, macSalt, ITERATIONS, KEY_LENGTH);
+        SecretKeySpec macKey = new SecretKeySpec(mKey, MAC_ALGORITHM);
+        Mac mac = Mac.getInstance(MAC_ALGORITHM);
+        mac.init(macKey);
+        return mac;
+    }
+    private Cipher getCipher(String password,byte[] encryptionSalt, boolean mode) throws Exception {
+        byte[] ekey = getKey(password, encryptionSalt, ITERATIONS, KEY_LENGTH);
+        SecretKeySpec encryptionKey = new SecretKeySpec(ekey, AES);
+        Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+        if(mode)
+            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new IvParameterSpec(new byte[16]));
+        else
+            cipher.init(Cipher.DECRYPT_MODE, encryptionKey, new IvParameterSpec(new byte[16]));
+        return cipher;
     }
 
 }
